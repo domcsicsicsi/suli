@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fájltár</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#fff; --text:#1c2230; --muted:#6b7385; --line:#e3e6ec;
+    --accent:#3b6cf6; --accent-text:#fff; --danger:#d64545; --hover:#f0f3fb;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#14171e; --card:#1c212b; --text:#e8ebf2; --muted:#8c94a8; --line:#2a3140;
+           --accent:#6b93ff; --accent-text:#0e1320; --danger:#ff6b6b; --hover:#232a38; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  .wrap{max-width:900px;margin:0 auto;padding:16px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 16px}
+  h1{font-size:1.4rem;margin:0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+  button,.btn{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--text);
+    padding:8px 14px;border-radius:8px;cursor:pointer}
+  button:hover,.btn:hover{background:var(--hover)}
+  button.primary{background:var(--accent);color:var(--accent-text);border-color:var(--accent)}
+  button.primary:hover{filter:brightness(1.08)}
+  button.danger{color:var(--danger)}
+  button.small{padding:4px 10px;font-size:.88rem}
+  input[type=text],input[type=password],input[type=search]{
+    font:inherit;width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--line);
+    background:var(--bg);color:var(--text)}
+  label{display:block;margin:12px 0 4px;font-size:.9rem;color:var(--muted)}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .grow{flex:1;min-width:140px}
+  .hidden{display:none!important}
+  .crumbs{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:0 0 12px;color:var(--muted)}
+  .crumbs a{color:var(--accent);cursor:pointer;text-decoration:none}
+  .crumbs a:hover{text-decoration:underline}
+  .drop{border:2px dashed var(--line);border-radius:12px;padding:22px;text-align:center;color:var(--muted);margin:12px 0}
+  .drop.over{border-color:var(--accent);background:var(--hover);color:var(--text)}
+  ul.files{list-style:none;margin:0;padding:0}
+  ul.files li{display:flex;align-items:center;gap:10px;padding:10px 6px;border-top:1px solid var(--line)}
+  ul.files li:first-child{border-top:0}
+  .ico{width:26px;text-align:center;font-size:1.2rem}
+  .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .name a{color:var(--text);cursor:pointer;text-decoration:none}
+  .name a:hover{color:var(--accent)}
+  .size{color:var(--muted);font-size:.85rem;white-space:nowrap}
+  .empty{color:var(--muted);text-align:center;padding:24px 0}
+  #toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--text);color:var(--bg);
+    padding:10px 16px;border-radius:8px;max-width:90vw;opacity:0;pointer-events:none;transition:opacity .2s}
+  #toast.show{opacity:1}
+  .note{font-size:.85rem;color:var(--muted);margin-top:10px}
+  progress{width:100%;height:8px;margin-top:8px}
+  @media (max-width:520px){ .size{display:none} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>📁 Fájltár</h1>
+    <div class="row">
+      <button id="btnSettings" class="small hidden">⚙ Beállítások</button>
+    </div>
+  </header>
+
+  <!-- Beállítások -->
+  <section id="setup" class="card">
+    <strong>Csatlakozás a GitHub repóhoz</strong>
+    <label for="owner">GitHub felhasználónév</label>
+    <input type="text" id="owner" placeholder="pl. kovacsjanos" autocomplete="off">
+    <label for="repo">Repó neve (ahol a fájlok vannak)</label>
+    <input type="text" id="repo" placeholder="pl. fajlok" autocomplete="off">
+    <div class="row">
+      <div class="grow">
+        <label for="branch">Ág (branch)</label>
+        <input type="text" id="branch" value="main" autocomplete="off">
+      </div>
+      <div class="grow">
+        <label for="root">Gyökérmappa a repón belül (üres = a repó gyökere)</label>
+        <input type="text" id="root" placeholder="pl. files" autocomplete="off">
+      </div>
+    </div>
+    <label for="token">Personal Access Token</label>
+    <input type="password" id="token" placeholder="github_pat_..." autocomplete="off">
+    <label style="display:flex;gap:8px;align-items:center;margin-top:12px;color:var(--text)">
+      <input type="checkbox" id="remember" checked> Emlékezzen erre az eszközre
+    </label>
+    <div class="row" style="margin-top:14px">
+      <button id="btnSave" class="primary">Mentés és csatlakozás</button>
+      <button id="btnForget" class="danger hidden">Adatok törlése erről az eszközről</button>
+    </div>
+    <p class="note">A token csak ennek a böngészőnek a tárhelyén marad, a GitHub-on kívül sehova nem megy.
+      Részletes útmutató a README-ben.</p>
+  </section>
+
+  <!-- Fájlkezelő -->
+  <section id="app" class="card hidden">
+    <div class="crumbs" id="crumbs"></div>
+    <div class="row">
+      <input type="search" id="filter" class="grow" placeholder="Keresés ebben a mappában…">
+      <button id="btnRefresh" title="Frissítés">↻</button>
+      <button id="btnMkdir">＋ Mappa</button>
+      <label class="btn primary" style="margin:0;color:var(--accent-text)">
+        ⬆ Feltöltés<input type="file" id="picker" multiple hidden>
+      </label>
+    </div>
+    <div class="drop" id="drop">Húzd ide a fájlokat a feltöltéshez</div>
+    <progress id="prog" class="hidden" max="100" value="0"></progress>
+    <ul class="files" id="list"></ul>
+    <p class="note">Egy fájl legfeljebb ~50 MB lehet (GitHub API-korlát). Törlés után a fájl a repó előzményeiben még megmarad.</p>
+  </section>
+</div>
+<div id="toast"></div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const KEY = 'fajltar-cfg';
+  const MAX = 50 * 1024 * 1024;
+  let cfg = null;      // {owner, repo, branch, root, token}
+  let cwd = '';        // aktuális mappa a gyökérhez képest
+  let items = [];
+
+  // ---------- segédek ----------
+  function toast(msg, ms = 3500){
+    const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), ms);
+  }
+  const enc = p => p.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+  const join = (...a) => a.filter(Boolean).join('/').replace(/\/+/g, '/');
+  const fmt = n => n < 1024 ? n + ' B' : n < 1048576 ? (n/1024).toFixed(1) + ' KB' : (n/1048576).toFixed(1) + ' MB';
+  function icon(name){
+    const e = name.split('.').pop().toLowerCase();
+    if (['png','jpg','jpeg','gif','webp','svg','heic'].includes(e)) return '🖼️';
+    if (['pdf'].includes(e)) return '📕';
+    if (['doc','docx','odt','txt','md'].includes(e)) return '📄';
+    if (['xls','xlsx','csv','ods'].includes(e)) return '📊';
+    if (['ppt','pptx'].includes(e)) return '📽️';
+    if (['zip','rar','7z','gz','tar'].includes(e)) return '🗜️';
+    if (['mp3','wav','flac','m4a'].includes(e)) return '🎵';
+    if (['mp4','mov','mkv','avi','webm'].includes(e)) return '🎬';
+    return '📎';
+  }
+
+  function loadCfg(){
+    try { return JSON.parse(localStorage.getItem(KEY) || sessionStorage.getItem(KEY) || 'null'); }
+    catch { return null; }
+  }
+  function saveCfg(c, remember){
+    try { localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); } catch {}
+    try { (remember ? localStorage : sessionStorage).setItem(KEY, JSON.stringify(c)); } catch {}
+  }
+
+  // ---------- GitHub API ----------
+  function url(path){
+    const base = `https://api.github.com/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}/contents`;
+    return path ? `${base}/${enc(path)}` : base;
+  }
+  async function gh(path, opts = {}, query = true){
+    const u = url(path) + (query ? `?ref=${encodeURIComponent(cfg.branch)}` : '');
+    const res = await fetch(u, {
+      ...opts,
+      headers: {
+        'Authorization': 'Bearer ' + cfg.token,
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        ...(opts.headers || {})
+      }
+    });
+    if (!res.ok){
+      let m = res.statusText;
+      try { m = (await res.json()).message || m; } catch {}
+      const err = new Error(res.status + ': ' + m); err.status = res.status; throw err;
+    }
+    return res;
+  }
+
+  async function list(){
+    const full = join(cfg.root, cwd);
+    $('#list').innerHTML = '<li class="empty">Betöltés…</li>';
+    try {
+      const res = await gh(full);
+      const data = await res.json();
+      items = (Array.isArray(data) ? data : [])
+        .filter(x => x.name !== '.gitkeep')
+        .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name, 'hu') : a.type === 'dir' ? -1 : 1));
+    } catch (e){
+      if (e.status === 404){ items = []; }
+      else { $('#list').innerHTML = ''; toast('Hiba: ' + e.message, 6000); return; }
+    }
+    render();
+  }
+
+  function render(){
+    // morzsák
+    const parts = cwd.split('/').filter(Boolean);
+    let html = '<a data-p="">🏠 Főmappa</a>';
+    parts.forEach((p, i) => {
+      html += ' › <a data-p="' + parts.slice(0, i + 1).join('/').replace(/"/g, '&quot;') + '">' + esc(p) + '</a>';
+    });
+    $('#crumbs').innerHTML = html;
+    $('#crumbs').querySelectorAll('a').forEach(a => a.onclick = () => { cwd = a.dataset.p; $('#filter').value = ''; list(); });
+
+    const q = $('#filter').value.trim().toLowerCase();
+    const shown = items.filter(i => !q || i.name.toLowerCase().includes(q));
+    const ul = $('#list'); ul.innerHTML = '';
+    if (!shown.length){
+      ul.innerHTML = '<li class="empty">' + (items.length ? 'Nincs találat.' : 'Ez a mappa üres.') + '</li>';
+      return;
+    }
+    shown.forEach(it => {
+      const li = document.createElement('li');
+      const isDir = it.type === 'dir';
+      li.innerHTML =
+        '<span class="ico">' + (isDir ? '📁' : icon(it.name)) + '</span>' +
+        '<span class="name"><a>' + esc(it.name) + '</a></span>' +
+        '<span class="size">' + (isDir ? '' : fmt(it.size)) + '</span>';
+      const open = li.querySelector('a');
+      if (isDir){
+        open.onclick = () => { cwd = join(cwd, it.name); $('#filter').value = ''; list(); };
+      } else {
+        open.onclick = () => openFile(it);
+        const dl = btn('⬇', 'Letöltés', () => download(it));
+        const del = btn('🗑', 'Törlés', () => remove(it)); del.classList.add('danger');
+        li.append(dl, del);
+      }
+      ul.append(li);
+    });
+  }
+  function btn(t, title, fn){
+    const b = document.createElement('button'); b.className = 'small'; b.textContent = t; b.title = title; b.onclick = fn; return b;
+  }
+  function esc(s){ return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  // ---------- műveletek ----------
+  async function getBlob(it){
+    const res = await gh(join(cfg.root, cwd, it.name), { headers: { 'Accept': 'application/vnd.github.raw+json' } });
+    return await res.blob();
+  }
+  async function openFile(it){
+    toast('Megnyitás…');
+    try {
+      const blob = await getBlob(it);
+      window.open(URL.createObjectURL(blob), '_blank');
+    } catch (e){ toast('Hiba: ' + e.message, 6000); }
+  }
+  async function download(it){
+    toast('Letöltés…');
+    try {
+      const blob = await getBlob(it);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = it.name; document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    } catch (e){ toast('Hiba: ' + e.message, 6000); }
+  }
+  async function remove(it){
+    if (!confirm('Biztosan törlöd: ' + it.name + '?')) return;
+    try {
+      await gh(join(cfg.root, cwd, it.name), {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'Törlés: ' + join(cwd, it.name), sha: it.sha, branch: cfg.branch })
+      }, false);
+      toast('Törölve.'); list();
+    } catch (e){ toast('Hiba: ' + e.message, 6000); }
+  }
+  function toBase64(file){
+    return new Promise((ok, no) => {
+      const r = new FileReader();
+      r.onload = () => ok(String(r.result).split(',')[1] || '');
+      r.onerror = () => no(r.error);
+      r.readAsDataURL(file);
+    });
+  }
+  async function upload(files){
+    files = [...files]; if (!files.length) return;
+    const prog = $('#prog'); prog.classList.remove('hidden'); prog.value = 0;
+    let done = 0, fail = 0;
+    for (const f of files){
+      try {
+        if (f.size > MAX) throw new Error('túl nagy (' + fmt(f.size) + ')');
+        const path = join(cfg.root, cwd, f.name);
+        const existing = items.find(i => i.name === f.name && i.type === 'file');
+        if (existing && !confirm(f.name + ' már létezik. Felülírod?')){ done++; continue; }
+        const body = { message: 'Feltöltés: ' + join(cwd, f.name), content: await toBase64(f), branch: cfg.branch };
+        if (existing) body.sha = existing.sha;
+        await gh(path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, false);
+      } catch (e){
+        fail++; toast(f.name + ': ' + e.message, 6000);
+        await new Promise(r => setTimeout(r, 1200));
+      }
+      done++; prog.value = Math.round(done / files.length * 100);
+    }
+    prog.classList.add('hidden');
+    if (!fail) toast('Feltöltve: ' + files.length + ' fájl');
+    list();
+  }
+  async function mkdir(){
+    const n = (prompt('Új mappa neve:') || '').trim().replace(/[\\/]/g, '');
+    if (!n) return;
+    try {
+      await gh(join(cfg.root, cwd, n, '.gitkeep'), {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'Új mappa: ' + join(cwd, n), content: '', branch: cfg.branch })
+      }, false);
+      cwd = join(cwd, n); list();
+    } catch (e){ toast('Hiba: ' + e.message, 6000); }
+  }
+
+  // ---------- UI ----------
+  function showSetup(){
+    $('#setup').classList.remove('hidden'); $('#app').classList.add('hidden'); $('#btnSettings').classList.add('hidden');
+    if (cfg){
+      $('#owner').value = cfg.owner; $('#repo').value = cfg.repo; $('#branch').value = cfg.branch;
+      $('#root').value = cfg.root; $('#token').value = cfg.token; $('#btnForget').classList.remove('hidden');
+    }
+  }
+  function showApp(){
+    $('#setup').classList.add('hidden'); $('#app').classList.remove('hidden'); $('#btnSettings').classList.remove('hidden');
+    cwd = ''; list();
+  }
+
+  $('#btnSave').onclick = async () => {
+    const c = {
+      owner: $('#owner').value.trim(), repo: $('#repo').value.trim(),
+      branch: $('#branch').value.trim() || 'main',
+      root: $('#root').value.trim().replace(/^\/+|\/+$/g, ''), token: $('#token').value.trim()
+    };
+    if (!c.owner || !c.repo || !c.token){ toast('Add meg a nevet, a repót és a tokent.'); return; }
+    cfg = c;
+    try {
+      const r = await fetch(`https://api.github.com/repos/${encodeURIComponent(c.owner)}/${encodeURIComponent(c.repo)}`,
+        { headers: { 'Authorization': 'Bearer ' + c.token, 'Accept': 'application/vnd.github+json' } });
+      if (!r.ok) throw new Error(r.status === 404 ? 'a repó nem található, vagy a token nem fér hozzá' : r.status === 401 ? 'érvénytelen token' : 'HTTP ' + r.status);
+      saveCfg(c, $('#remember').checked);
+      showApp();
+    } catch (e){ toast('Nem sikerült csatlakozni: ' + e.message, 6000); }
+  };
+  $('#btnForget').onclick = () => {
+    if (!confirm('Törlöd a mentett adatokat (token is) erről az eszközről?')) return;
+    try { localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); } catch {}
+    cfg = null; ['owner','repo','root','token'].forEach(i => $('#' + i).value = ''); $('#branch').value = 'main';
+    $('#btnForget').classList.add('hidden'); toast('Törölve.');
+  };
+  $('#btnSettings').onclick = showSetup;
+  $('#btnRefresh').onclick = list;
+  $('#btnMkdir').onclick = mkdir;
+  $('#filter').oninput = render;
+  $('#picker').onchange = e => { upload(e.target.files); e.target.value = ''; };
+
+  const drop = $('#drop');
+  ['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => upload(e.dataTransfer.files));
+  window.addEventListener('dragover', e => e.preventDefault());
+  window.addEventListener('drop', e => e.preventDefault());
+
+  cfg = loadCfg();
+  cfg ? showApp() : showSetup();
+})();
+</script>
+</body>
+</html>
